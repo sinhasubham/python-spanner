@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Context manager for Cloud Spanner batched writes."""
+
 import functools
 from typing import List, Optional
 
@@ -242,6 +243,8 @@ class Batch(_BatchBase):
             observability_options=getattr(database, "observability_options", None),
             metadata=metadata,
         ) as span, MetricsCapture():
+            nth_request = getattr(database, "_next_nth_request", 0)
+            attempt = AtomicCounter(0)
 
             def wrapped_method():
                 commit_request = CommitRequest(
@@ -256,8 +259,8 @@ class Batch(_BatchBase):
                 # should be increased. attempt can only be increased if
                 # we encounter UNAVAILABLE or INTERNAL.
                 call_metadata, error_augmenter = database.with_error_augmentation(
-                    getattr(database, "_next_nth_request", 0),
-                    1,
+                    nth_request,
+                    attempt.increment(),
                     metadata,
                     span,
                 )
